@@ -13,6 +13,9 @@ TOKEN = os.getenv("CHICKEN_BOT_TOKEN")
 
 analyzer = SentimentIntensityAnalyzer()
 
+user_daily_offenses = defaultdict(list)
+# Tracks the number of warnings each user has in the last 24 hours
+
 intents = discord.Intents.default()
 intents.messages = True
 intents.guilds = True
@@ -49,7 +52,7 @@ async def on_message(message):
         # Harassment message detection
         sentiment = analyzer.polarity_scores(message.content)
         if sentiment["compound"] <= -0.6:  # Adjust threshold as needed
-                await warn_user(message, "toxic/harassing language")
+            await warn_user(message, "toxic/harassing language")
 
     await bot.process_commands(message)
 
@@ -77,6 +80,30 @@ async def warn_user(message, reason):
     # Punishment on limit
     if warning_counts[user.id] >= WARNING_LIMIT:
         muted_role = discord.utils.get(guild.roles, name="Muted")
+        now = datetime.datetime.utcnow()
+        user_daily_offenses[user.id].append(now)
+
+        # Filter to just today's offenses
+        today = now.date()
+        recent_offenses = [dt for dt in user_daily_offenses[user.id] if dt.date() == today]
+
+        # Kick if 5 or more offenses in a single day
+        if len(recent_offenses) >= 5:
+            try:
+                await user.kick(reason="5 warnings in one day")
+                await message.channel.send(f"👢 {user.mention} has been kicked for repeated infractions.")
+                if log_channel:
+                    await log_channel.send(
+                        f"👢 [{timestamp}] {user.mention} was kicked for reaching 5 warnings in a single day."
+                    )
+                return  # Stop here so it doesn’t continue to mute after kicking
+            except discord.Forbidden:
+                await message.channel.send(f"❌ I don't have permission to kick {user.mention}.")
+                if log_channel:
+                    await log_channel.send(
+                        f"❌ [{timestamp}] Tried to kick {user.mention} but lacked permissions."
+                    )
+
         if muted_role:
             # Remove all roles except @everyone
             roles_to_remove = [role for role in user.roles if role.name != "@everyone"]
@@ -104,6 +131,6 @@ async def warn_user(message, reason):
             if log_channel:
                 await log_channel.send(
                     f"⚠️ [{timestamp}] Tried to mute {user.mention} but 'Muted' role was missing."
-                )   
+                )
 
 bot.run(TOKEN)  # Use bot.run to start the bot
