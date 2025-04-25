@@ -2,6 +2,16 @@ import discord
 from discord.ext import commands
 from collections import defaultdict, deque
 import time
+import datetime
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+import asyncio
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+TOKEN = os.getenv("CHICKEN_BOT_TOKEN")
+
+analyzer = SentimentIntensityAnalyzer()
 
 intents = discord.Intents.default()
 intents.messages = True
@@ -36,19 +46,47 @@ async def on_message(message):
         if timestamps[-1] - timestamps[0] < 10:
             await warn_user(message, "spamming")
 
-        # Repetitive message detection
-        contents = [msg.content.lower() for msg in user_message_log[user_id]]
-        if len(set(contents)) == 1 and contents[0] != "":
-            await warn_user(message, "repetitive/harassing behavior")
+        # Harassment message detection
+        sentiment = analyzer.polarity_scores(message.content)
+        if sentiment["compound"] <= -0.6:  # Adjust threshold as needed
+                await warn_user(message, "toxic/harassing language")
 
     await bot.process_commands(message)
 
+UNMUTE_DELAY = 10 * 60  # 10 minutes in seconds
+
 async def warn_user(message, reason):
     user = message.author
+    guild = message.guild
     warning_counts[user.id] += 1
+
+    # Warn in public
     await message.channel.send(f"⚠️ {user.mention}, you are being warned for {reason}.")
 
-    if warning_counts[user.id] >= WARNING_LIMIT:
-        await message.channel.send(f"🚫 {user.mention} has exceeded the warning limit and may be muted/kicked (not implemented).")
+    # Format timestamp
+    timestamp = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
 
-bot.run("CHICKEN_BOT_TOKEN")
+    # Logging to #logs
+    log_channel = discord.utils.get(guild.text_channels, name="logs")
+    if log_channel:
+        await log_channel.send(
+            f"📝 [{timestamp}] Warning issued to {user.mention} for **{reason}**.\n"
+            f"Total warnings: `{warning_counts[user.id]}`"
+        )
+
+    # Punishment on limit
+    if warning_counts[user.id] >= WARNING_LIMIT:
+        muted_role = discord.utils.get(guild.roles, name="Muted")
+        if muted_role:
+            await user.add_roles(muted_role, reason="Exceeded warning limit")
+            await message.channel.send(f"🔇 {user.mention} has been muted for repeated offenses.")
+            if log_channel:
+                await log_channel.send(
+                    f"🔇 [{timestamp}] {user.mention} was auto-muted for reaching {WARNING_LIMIT} warnings. Will unmute in 10 minutes."
+                )
+
+            # AUTO UNMUTE AFTER DELAY
+            await asyncio.sleep(UNMUTE_DELAY)
+            await user.remove_roles(muted_role, reason="Auto-unmute after timeout")
+
+            unmute_time = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S_
