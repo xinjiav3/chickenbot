@@ -28,7 +28,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 user_message_log = defaultdict(lambda: deque(maxlen=5))
 warning_counts = defaultdict(int)
 
-SPAM_THRESHOLD = 5  # messages in 10 seconds
+SPAM_THRESHOLD = 7  # messages in 10 seconds
 WARNING_LIMIT = 3
 
 @bot.event
@@ -43,20 +43,20 @@ async def on_message(message):
     user_id = message.author.id
     user_message_log[user_id].append(message)
 
-    # Spam Detection: 5 messages in 10 seconds
-    if len(user_message_log[user_id]) == 5:
+    # Spam Detection: 7 messages in 10 seconds
+    if len(user_message_log[user_id]) == 7:
         timestamps = [msg.created_at.timestamp() for msg in user_message_log[user_id]]
         if timestamps[-1] - timestamps[0] < 10:
             await warn_user(message, "spamming")
 
         # Harassment message detection
         sentiment = analyzer.polarity_scores(message.content)
-        if sentiment["compound"] <= -0.6:  # Adjust threshold as needed
+        if sentiment["compound"] <= -0.5:  # Adjust threshold as needed
             await warn_user(message, "toxic/harassing language")
 
     await bot.process_commands(message)
 
-UNMUTE_DELAY = 10 * 60  # 10 minutes in seconds
+UNMUTE_DELAY = 5 * 60  # 10 minutes in seconds
 
 async def warn_user(message, reason):
     user = message.author
