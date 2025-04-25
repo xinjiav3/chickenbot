@@ -70,7 +70,7 @@ async def warn_user(message, reason):
     timestamp = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
 
     # Logging to #logs
-    log_channel = discord.utils.get(guild.text_channels, name="logs")
+    log_channel = discord.utils.get(guild.text_channels, name="bot-logs")
     if log_channel:
         await log_channel.send(
             f"📝 [{timestamp}] Warning issued to {user.mention} for **{reason}**.\n"
