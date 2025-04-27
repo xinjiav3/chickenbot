@@ -8,6 +8,7 @@ import asyncio
 from dotenv import load_dotenv
 import os
 
+
 load_dotenv()
 TOKEN = os.getenv("CHICKEN_BOT_TOKEN")
 
